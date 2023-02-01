@@ -1,0 +1,8 @@
+
+.reverse {
+    display: flex;
+    flex-direction: column-reverse;
+}
+.page_header{
+    top: 0;
+}

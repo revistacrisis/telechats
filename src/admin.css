@@ -1,0 +1,17 @@
+.sidebar {    display: flex;
+    overflow: scroll;
+    flex: 1 2;
+}
+
+.main {
+    display: flex;
+    flex: 2 0;
+}
+
+/* input[type="submit"] {
+   position: fixed;
+   right: 20px;
+   top: 20px;
+   z-index: 99;
+
+   } */
