@@ -1,93 +1,132 @@
-const parser = new DOMParser();
+import type {BucketData, ChatData, MessageData} from './Chat';
+import type {BaseData} from './Root';
 
-const getChat = (dom) => {
-    const messages = []
-    let from;
-    let forwarded;
+const parser = new DOMParser();
+const getInner = (d:HTMLElement | null ) => d?.innerHTML.trim() || "";
+
+export type HTMLChatData = {
+    id: string;
+    from: string;
+    userName: string;
+    count: number;
+    messages: MessageData[];
+}
+
+function getChat(dom:Document, id:string): HTMLChatData {
+    const messages: MessageData[] = []
+    let from :string =  getInner(dom.querySelector('.page_header .text.bold'));
+    let forwarded : string;
 
     dom.querySelectorAll('.message').forEach(msg => {
-        if (msg.classList.contains('service')) {
+        let text;
+        let voice;
+        let forwarded;
+        let from;
+
+        if (!msg || msg.classList.contains('service')) {
             return;
         }
-        try { from = msg.querySelector('.body > .from_name').innerHTML.trim() } catch (e) { }
+        from = getInner(msg.querySelector('.body > .from_name'))
+        try { text = getInner(msg.querySelector('.text')) } catch (e) { }
+        try {
+            const v = msg.querySelector('.media_voice_message');
+            if (!v)  throw new Error();
+            voice = {
+                url: v?.getAttribute('href') || "",
+                length: getInner(v?.querySelector('.status.details')),
+            }
+        } catch (e) {}
+        try {
+            let _from = '';
+            const f = msg.querySelector('.forwarded.body')
+            if (!f) throw new Error();
+            try { _from = getInner(f?.querySelector('.from_name'))} catch (e) { }
+            forwarded = {
+                from: _from.split('<')[0],
+                date: f.querySelector('.date.details')?.getAttribute('title') || ""
+            }
+        } catch (e) { }
+
         const message = {
+            text,
             from,
-            date: msg.querySelector('.date.details').title,
+            voice,
+            forwarded,
+            joined: false,
+            date: msg.querySelector('.date.details')?.getAttribute('title') || "",
             id: msg.id
         }
-        try { message.text = msg.querySelector('.text').innerHTML.trim() } catch (e) { }
-        try {
-            const v = msg.querySelector('.media_voice_message')
-            message.voice = {
-                url: v.href,
-                length: v?.querySelector('.status.details').innerHTML.trim()
-            }
-        } catch (e) { }
-        try {
-            const f = msg.querySelector('.forwarded.body')
-            try { forwarded = f.querySelector('.from_name').innerHTML.trim() } catch (e) { }
-            message.forwarded = {
-                from: forwarded.split('<')[0],
-                date: f.querySelector('.date.details').title
-            }
-        } catch (e) { }
 
         messages.push(message)
     })
 
     return {
-        from: dom.querySelector('.page_header .text.bold').innerHTML.trim(),
-        messages
+        id,
+        messages,
+        count: messages.length,
+        from,
+        userName: from
     }
 }
 
-const getData = (dom) => {
+function getData(dom: Document): BaseData {
     return {
-        name: dom.querySelector('.personal_info .names .row .value').innerHTML.trim(),
-        phone: dom.querySelector('.personal_info .info .row .value').innerHTML.trim(),
-        chats: dom.querySelector('.section.block_link.chats .counter').innerHTML.trim(),
-        contacts: dom.querySelector('.section.block_link.frequent .counter').innerHTML.trim(),
+        name: getInner(dom.querySelector('.personal_info .names .row .value')),
+        phone: getInner(dom.querySelector('.personal_info .info .row .value')),
+        chats: Array(parseInt(getInner(dom.querySelector('.section.block_link.chats .counter')))),
+        contacts: Array(parseInt(getInner(dom.querySelector('.section.block_link.frequent .counter')))),
     }
 }
 
-export const html2json = (html: string, path: string) => {
+export function html2json(html: string, path: string) {
     const dom = parser.parseFromString(html, 'text/html')
+    if (!path) return null;
     switch (true) {
         case !!path.match(/chat_[0-9]+/):
             const id = path.match(/chat_[0-9]+/)[0]
-            return {
-                ...getChat(dom),
-                id,
-            }
+            return getChat(dom, id)
         case !!path.match(/export_result/):
             return getData(dom)
         default:
             console.error(`unhandled path: ${path}`)
-            return
+            throw new Error();
     }
 }
 
 const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-const prettyDate = date => {
+const prettyDate = (date:string) => {
     const parts = date.split('.')
     return [parts[0].replace(/^0/, ''), months[parseInt(parts[1], 10) - 1], parts[2]].join(' ')
 }
 
-const chat2bucket = (chat) => {
+
+const new_bucket = () => {
+    const bucket : BucketData = {
+        messages: [],
+        start: '',
+        id: 0
+    }
+    return bucket;
+}
+
+function  html2chat (chat: HTMLChatData): ChatData {
     let last;
-    chat.buckets = []
-    let bucket = { messages: [] }
+
+    const {messages, ...chatData} = chat
+    const buckets :BucketData[]= []
+
+    let bucket = new_bucket()
     let service = 0
-    for (let m of chat.messages) {
+    for (let m of messages) {
         if (!m) continue
         const joined = !last ? false
-            : last.from !== m.from ? false
-                : last.date !== m.date ? false
-                    : true
+                     : last.from !== m.from ? false
+                     : last.date !== m.date ? false
+                     : true
         if (!last || last.date.split(' ')[0] !== m.date.split(' ')[0]) {
             if (bucket.messages.length) {
-                chat.buckets.push(bucket)
-                bucket = { messages: [] }
+                buckets.push(bucket)
+                bucket = new_bucket()
             }
             bucket.start = prettyDate(m.date.split(' ')[0])
             bucket.id = service++
@@ -96,52 +135,70 @@ const chat2bucket = (chat) => {
         bucket.messages.push({ ...m, joined })
         last = m;
     }
-    chat.count = chat.messages.length
-    delete chat.messages
-    return chat
+
+    return {
+            ...chatData,
+            count: messages.length,
+            chatType: "private",
+            buckets,
+            }
 }
-export const files2json = (files) => {
-    const promises = {
+
+interface FilePromises {
+    chats: Promise<HTMLChatData>[],
+    data: Promise<BaseData>
+}
+
+export const files2json = (files: File[]) => {
+    const promises : FilePromises = {
         chats: [],
-        data: Promise.resolve({
+        data: new Promise(accept => accept({
+            name: 'unknown',
+            phone: 'unknown',
+            contacts: [],
             chats: []
-        })
+        }))
     }
 
     for (let file of files) {
-        const promise = () => new Promise((accept, reject) => {
+        const promise : Promise<BaseData | HTMLChatData>= new Promise((accept, reject) => {
             const reader = new FileReader();
             reader.addEventListener('load', (e) => {
-                accept(html2json(e.target.result, file.webkitRelativePath))
+                const r = e?.target?.result?.toString();
+                if (!r) return;
+                const json = html2json(r, file.webkitRelativePath)
+                if (!json) return reject()
+                accept(json)
             })
             reader.readAsText(file)
         })
         switch (true) {
             case !!file.name.match(/messages[0-9]*.html/):
-                promises.chats.push(promise())
+                promises.chats.push(promise)
                 break;
             case !!file.name.match(/export_results.html/):
-                promises.data = promise()
+                promises.data.then(() => promise)
                 break;
         }
     }
 
     return promises.data
-        .then(data => Promise.all(promises.chats)
-            .then(datas => ({
-                ...data,
-                chats: datas.reduce((a: { string: ChatData }, c: ChatData) => {
-                    a[c.id] = {
-                        ...c,
-                        messages: c.messages.concat(a[c.id]?.messages)
-                    }
-                    return a
-                }, {})
-            }))
-        ).then(info => {
-            for (let k of Object.keys(info.chats)) {
-                info.chats[k] = chat2bucket(info.chats[k])
-            }
-            return info
-        })
+                   .then(data => Promise.all(promises.chats)
+                                        .then(chats => ({
+                                            ...data,
+                                            chats: chats.reduce((a: Record<string, HTMLChatData>, c: HTMLChatData) => {
+                                                a[c.id] = {
+                                                    ...c,
+                                                    messages: c.messages.concat(a[c.id]?.messages)
+                                                }
+                                                return a
+                                            }, {})
+                                        }))
+                   ).then(info => {
+                       const chats : Record<string, ChatData> = {}
+                       for (let k of Object.keys(info.chats)) {
+                           chats[k] = html2chat(info.chats[k])
+                       }
+                       return {...info, chats}
+                   })
 }

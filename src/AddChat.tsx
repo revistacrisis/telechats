@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { Form, useLoaderData } from 'react-router-dom';
 import { BlockLink, Page, Row, UserPic } from './Components';
+import { ChatData } from './Chat';
+
+
 
 export default function AddChat() {
-    const { name, chat } = useLoaderData();
+    const { name: string, chat: ChatData } = useLoaderData();
     const [selected, setSelected] = useState<string>(name)
 
     const to = selected === name ? chat.from : name;
@@ -22,4 +25,4 @@ export default function AddChat() {
             </Form>
         </div>
     )
-}
+                                   }

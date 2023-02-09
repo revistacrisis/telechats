@@ -5,9 +5,8 @@ type ReactChild = string | ReactNode | ReactNode[] | null;
 
 export function UserPic({ userName, className = "pull_left", size = "48", ...props }: {
     userName: string,
-    children: ReactChild,
-    className: string | null,
-    size: string | number
+    className?: string,
+    size?: number | string,
 }) {
     return (
         <div className={`${className} userpic_wrap`} {...props}>
@@ -21,7 +20,7 @@ export function UserPic({ userName, className = "pull_left", size = "48", ...pro
 }
 
 export function Body({ className, children }: {
-    className: string,
+    className?: string,
     children: ReactChild
 }) {
     return (
@@ -31,10 +30,10 @@ export function Body({ className, children }: {
     )
 }
 
-export function Page({ className = "", header, children }: {
-    className: string | null,
+export function Page({ className, header, children }: {
     header: ReactChild,
-    children: ReactChild
+    children: ReactChild,
+    className?: string,
 }) {
     return (
         <div className={`page_wrap ${className}`}>
@@ -45,8 +44,8 @@ export function Page({ className = "", header, children }: {
 }
 
 function LinkOrDiv({ to, children, className = "content", ...props }: {
-    className: string | null,
-    to: string | null,
+    className?: string,
+    to?: string,
     children: ReactChild
 }) {
     if (to) return (
@@ -61,8 +60,8 @@ function LinkOrDiv({ to, children, className = "content", ...props }: {
 }
 
 export function Header({ back, children }: {
-    back: string | null,
-    children: ReactChild
+    children: ReactChild,
+    back?: string,
 }) {
     return (
         <div className="page_header">
@@ -76,22 +75,23 @@ export function Header({ back, children }: {
 }
 
 export function Row({ className, label, value, editing, ...props }: {
-    className: string | null,
-    label: ReactChild,
-    value: ReactChild
+    className?: string,
+    label?: ReactChild,
+    value?: ReactChild | string,
+    editing?: boolean,
 }) {
     return (
         <div className={`rows ${className}`} {...props}>
             {value ?
-                <div className="row">
-                    <div className="label details">
-                        {label}
-                    </div>
-                    <div className="value bold">
-                        {editing ? <input type="text" name={className.trim()} defaultValue={value} /> : value}
-                    </div>
-                </div>
-                : null
+             <div className="row">
+                 <div className="label details">
+                     {label}
+                 </div>
+                 <div className="value bold">
+                     {editing ? <input type="text" name={className?.trim()} defaultValue={value} /> : value}
+                 </div>
+             </div>
+            : null
             }
         </div>
     )
@@ -99,9 +99,9 @@ export function Row({ className, label, value, editing, ...props }: {
 
 export function BlockLink({ className, counter, to, children, ...props }: {
     className: string | null,
-    counter: ReactChild,
     to: string,
-    children: ReactChild
+    children: ReactChild,
+    counter?: ReactChild,
 }) {
     return (
         <LinkOrDiv className={`section block_link ${className}`} to={to} {...props}>

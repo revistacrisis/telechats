@@ -7,11 +7,15 @@ import { ChatData } from './Chat';
 export type BaseData = {
     name: string,
     phone: string,
-    chats: ChatData[],
-    contacts: []
+    chats: ChatData[] | Array<any>,
+    contacts: Array<any>
 }
 
-function PersonalInfo({ name, phone, editing }) {
+function PersonalInfo({ name, phone, editing = false}: {
+    name: string,
+    phone: string,
+    editing?: boolean
+}) {
     return (
         <div className="personal_info clearfix">
             <UserPic className="pull_right" userName={name} size={90} />
@@ -25,7 +29,12 @@ function PersonalInfo({ name, phone, editing }) {
     )
 }
 
-function RootInfo({ chats = {}, contacts = [], ...props }) {
+function RootInfo({ chats = {}, contacts = [], ...props }: {
+    chats: Record<string, ChatData>,
+    contacts: Array<string>,
+    name: string,
+    phone: string
+}) {
     return (<>
         <MainContext.Consumer>
             {({ state }) => <PersonalInfo {...props} {...state} />}
@@ -54,7 +63,7 @@ function GotoAdmin() {
 }
 
 function Root() {
-    const base = useLoaderData();
+    const base = useLoaderData() || {};
     console.error(base)
 
     return (

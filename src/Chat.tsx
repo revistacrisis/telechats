@@ -17,20 +17,19 @@ export type MessageData = {
     date: string;
     from: string;
     joined: boolean;
-    voice: {
+    voice?: {
         url: string;
         length: string;
     };
-    forwarded: ForwardedData;
+    forwarded?: ForwardedData;
 }
-type BucketData = {
+export type BucketData = {
     start: string;
     id: number;
     messages: MessageData[];
 }
 export type ChatData = {
     id: string;
-    userPic: string;
     userName: string;
     chatType: "private";
     count: number;

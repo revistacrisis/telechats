@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc ; vite build",
+    "build-strict": "tsc && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -14,6 +15,7 @@
     "react-dom": "^18.2.0",
     "react-flip-toolkit": "^7.0.17",
     "react-router-dom": "^6.6.1",
+    "react-router-typing": "^1.0.0",
     "react-transition-group": "^4.4.5"
   },
   "devDependencies": {
