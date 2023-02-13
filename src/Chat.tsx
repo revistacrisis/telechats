@@ -25,8 +25,9 @@ export type MessageData = {
 }
 export type BucketData = {
     start: string;
-    id: number;
+    id: string;
     messages: MessageData[];
+    jump_from?: number;
 }
 export type ChatData = {
     id: string;
@@ -61,9 +62,9 @@ export function AddChat() {
     )
 }
 
-function ServiceMessage({ id, children }: { id: number, children: ReactElement }) {
+function ServiceMessage({ id, children, className="" }: { id: number, children: ReactElement, className?: string }) {
     return (
-        <div className="message service" id={`message-${id}`}>
+        <div className={`message service ${className}`} id={`message-${id}`}>
             <div className="body details">
                 {children}
             </div>
@@ -142,10 +143,15 @@ function FormOrDiv({ editing, children, ...props }) {
     return (<div {...props}>{children}</div>)
 }
 
-function Bucket({ id, start, messages,...props }) {
+function Bucket({ id, start, messages, jump_from, ...props }) {
     return (
         <>
-            {messages.length ? <ServiceMessage id={id}>{start}</ServiceMessage> : null}
+        {jump_from ? <ServiceMessage className="jumped" id={id}>
+            Possibly missing {messages[0].id - jump_from} messages
+            <br/>
+            Jumped from: {jump_from} to {messages[0].id}
+        </ServiceMessage> : null}
+        {messages.length ? <ServiceMessage id={id}>{start}</ServiceMessage> : null}
             {messages.map(m => (
                 <>
                     <Message key={m.id} msg={m} {...props}/>

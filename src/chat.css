@@ -6,3 +6,7 @@
 .page_header{
     top: 0;
 }
+
+.jumped {
+    background-color: #ff6666;
+}

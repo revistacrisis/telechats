@@ -10,22 +10,33 @@ export type HTMLChatData = {
     userName: string;
     count: number;
     messages: MessageData[];
+    jumps?: Record<number, number>;
 }
 
-function getChat(dom:Document, id:string): HTMLChatData {
+function getChat(dom:Document, cid:string): HTMLChatData {
     const messages: MessageData[] = []
     let from :string =  getInner(dom.querySelector('.page_header .text.bold'));
     let forwarded : string;
+    let last_id : number = 0;
+    let jumps: Record<number, number> = {};
 
     dom.querySelectorAll('.message').forEach(msg => {
         let text;
         let voice;
         let forwarded;
         let from;
+        const id = parseInt(msg.id.replace(/message-?/, ''));
 
         if (!msg || msg.classList.contains('service')) {
             return;
         }
+
+        if ( id !== last_id + 1) {
+            console.error(`${cid}: messages jumped from ${last_id} to ${id}`)
+            jumps[last_id] = id;
+        }
+        last_id = id;
+
         from = getInner(msg.querySelector('.body > .from_name'))
         try { text = getInner(msg.querySelector('.text')) } catch (e) { }
         try {
@@ -48,23 +59,24 @@ function getChat(dom:Document, id:string): HTMLChatData {
         } catch (e) { }
 
         const message = {
+            id,
             text,
             from,
             voice,
             forwarded,
             joined: false,
             date: msg.querySelector('.date.details')?.getAttribute('title') || "",
-            id: msg.id
         }
 
         messages.push(message)
     })
 
     return {
-        id,
         messages,
-        count: messages.length,
         from,
+        jumps,
+        id: cid,
+        count: messages.length,
         userName: from
     }
 }
@@ -73,23 +85,8 @@ function getData(dom: Document): BaseData {
     return {
         name: getInner(dom.querySelector('.personal_info .names .row .value')),
         phone: getInner(dom.querySelector('.personal_info .info .row .value')),
-        chats: Array(parseInt(getInner(dom.querySelector('.section.block_link.chats .counter')))),
-        contacts: Array(parseInt(getInner(dom.querySelector('.section.block_link.frequent .counter')))),
-    }
-}
-
-export function html2json(html: string, path: string) {
-    const dom = parser.parseFromString(html, 'text/html')
-    if (!path) return null;
-    switch (true) {
-        case !!path.match(/chat_[0-9]+/):
-            const id = path.match(/chat_[0-9]+/)[0]
-            return getChat(dom, id)
-        case !!path.match(/export_result/):
-            return getData(dom)
-        default:
-            console.error(`unhandled path: ${path}`)
-            throw new Error();
+        chats: Array(parseInt(getInner(dom.querySelector('.section.block_link.chats .counter'))) || 1),
+        contacts: Array(parseInt(getInner(dom.querySelector('.section.block_link.frequent .counter'))) || 0),
     }
 }
 
@@ -109,27 +106,47 @@ const new_bucket = () => {
     return bucket;
 }
 
-function  html2chat (chat: HTMLChatData): ChatData {
+function html2chat (chat: HTMLChatData, mids: Record<number, string>): ChatData {
     let last;
 
-    const {messages, ...chatData} = chat
+    const {messages, jumps, ...chatData} = chat
     const buckets :BucketData[]= []
 
     let bucket = new_bucket()
     let service = 0
+    let jump = 0
     for (let m of messages) {
         if (!m) continue
         const joined = !last ? false
                      : last.from !== m.from ? false
                      : last.date !== m.date ? false
                      : true
-        if (!last || last.date.split(' ')[0] !== m.date.split(' ')[0]) {
+
+        last = last || {id: 0}
+        let bid;
+
+        const maybe_new_bucket = bid => {
             if (bucket.messages.length) {
                 buckets.push(bucket)
                 bucket = new_bucket()
             }
             bucket.start = prettyDate(m.date.split(' ')[0])
-            bucket.id = service++
+            bucket.id = bid
+            return bucket;
+        }
+
+        if (last.id in jumps) {
+            const to = jumps[last.id]
+            for (; last.id < to; last.id++) {
+                if (! mids[last.id])
+                break;
+            }
+            if (to - last.id > 2) {
+                maybe_new_bucket(`jump-${jump++}`)
+                bucket.jump_from = last.id
+            }
+        } else if (bucket.messages.length && (!last || last.date.split(' ')[0] !== m.date.split(' ')[0])) {
+            maybe_new_bucket(`service-${service++}`)
         }
 
         bucket.messages.push({ ...m, joined })
@@ -137,11 +154,11 @@ function  html2chat (chat: HTMLChatData): ChatData {
     }
 
     return {
-            ...chatData,
-            count: messages.length,
-            chatType: "private",
-            buckets,
-            }
+        ...chatData,
+        count: messages.length,
+        chatType: "private",
+        buckets,
+    }
 }
 
 interface FilePromises {
@@ -150,6 +167,7 @@ interface FilePromises {
 }
 
 export const files2json = (files: File[]) => {
+    const unhandled = []
     const promises : FilePromises = {
         chats: [],
         data: new Promise(accept => accept({
@@ -161,26 +179,34 @@ export const files2json = (files: File[]) => {
     }
 
     for (let file of files) {
-        const promise : Promise<BaseData | HTMLChatData>= new Promise((accept, reject) => {
+
+        const make_promise = handler => new Promise((accept, reject) => {
             const reader = new FileReader();
             reader.addEventListener('load', (e) => {
                 const r = e?.target?.result?.toString();
                 if (!r) return;
-                const json = html2json(r, file.webkitRelativePath)
-                if (!json) return reject()
-                accept(json)
+                const dom = parser.parseFromString(r, 'text/html')
+                const json = handler(dom)
+                if (json) accept(json)
             })
             reader.readAsText(file)
         })
+
         switch (true) {
             case !!file.name.match(/messages[0-9]*.html/):
-                promises.chats.push(promise)
-                break;
+                const chat = file.webkitRelativePath.match(/chat_[0-9]+/)
+                const id = chat ? chat[0] : "none"
+                console.error(`got chats at: ${file.webkitRelativePath}/${file.name}`)
+                promises.chats.push(make_promise(dom => getChat(dom, id)))
             case !!file.name.match(/export_results.html/):
-                promises.data.then(() => promise)
-                break;
+                console.error(`got data at: ${file.webkitRelativePath}/${file.name}`)
+                promises.data = make_promise(dom => getData(dom))
+            default:
+                unhandled.push(file.name)
         }
     }
+
+    console.error(`unhandled paths: ${unhandled}`)
 
     return promises.data
                    .then(data => Promise.all(promises.chats)
@@ -196,9 +222,20 @@ export const files2json = (files: File[]) => {
                                         }))
                    ).then(info => {
                        const chats : Record<string, ChatData> = {}
-                       for (let k of Object.keys(info.chats)) {
-                           chats[k] = html2chat(info.chats[k])
+                       const mids : Record<number, string> = {};
+                       let max_id = 0;
+
+                       for (let c of Object.keys(info.chats)) {
+                           for (let m of chats[c]?.messages || []) {
+                               max_id = Math.max(max_id, m.id);
+                               mids[m.id] = c
+                           }
                        }
+
+                       for (let c of Object.keys(info.chats)) {
+                           chats[c] = html2chat(info.chats[c], mids)
+                       }
+
                        return {...info, chats}
                    })
 }
