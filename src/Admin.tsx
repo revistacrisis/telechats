@@ -17,6 +17,7 @@ function Admin() {
 
     const fileChanged = async ({ target }: ChangeEvent<HTMLInputElement>) => {
         if (!target || !target.files) return
+        setData({})
         setData(await files2json(target.files))
     }
     return (
